@@ -256,6 +256,12 @@ body[data-phase="live"] #fieldWrap{box-shadow:0 0 0 3px var(--off) inset}
 .gDrives .d{display:grid;grid-template-columns:64px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:10px;background:var(--board);font-size:13px}
 .gDrives .d b{font-weight:800} .gDrives .d .p{font-weight:800;font-variant-numeric:tabular-nums}
 .gDrives .d.td .p{color:var(--open)} .gDrives .d.no .p{color:var(--ink-3)}
+.gLabel small{font-weight:500;color:var(--ink-3);margin-left:6px}
+.whoRow{display:grid;grid-template-columns:72px 84px minmax(0,1fr);gap:8px}
+.whoRow input{min-width:0;font:700 17px/1 system-ui,sans-serif;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px}
+.gSend{margin-top:10px;padding:10px 12px;border-radius:12px;background:var(--board);font-size:14px;font-weight:700;display:none}
+.gSend.show{display:block} .gSend.ok{background:#e8f6ec;color:#1e6b3a} .gSend.bad{background:#fdeceb;color:var(--shut)}
+.gSend button{margin-left:8px;min-height:36px;padding:0 12px;border-radius:10px;background:var(--ink);color:#fff;font-weight:700}
 .gCode{margin-top:10px;font:700 13px/1.4 ui-monospace,Menlo,monospace;background:#14201a;color:#ffe28a;border-radius:10px;padding:8px 10px;text-align:center}
 @media (max-width:820px){
   header{flex-wrap:wrap} .sb{order:3;flex-basis:100%} .sb .c{min-width:0;flex:1;padding:3px 6px}
@@ -464,6 +470,8 @@ body:has(#view3d[style*="flex"]) .gBanner{bottom:auto;top:64px}
       <li>공은 <b>실시간</b> — 플레이 중에 리시버를 눌러 던져요</li>
     </ul>
     <div class="gField"><label for="inpSeed">문제 번호 <small>같은 번호면 모두 같은 수비를 만나요</small></label><input id="inpSeed" type="tel" inputmode="numeric" maxlength="6" autocomplete="off"></div>
+    <div class="gLabel">내 이름 <small>순위표에 올라가요 · 모두 비워 두면 연습 경기</small></div>
+    <div class="whoRow"><input id="inpC" type="tel" inputmode="numeric" maxlength="2" placeholder="반" aria-label="반" autocomplete="off"><input id="inpN" type="tel" inputmode="numeric" maxlength="2" placeholder="번호" aria-label="번호" autocomplete="off"><input id="inpName" type="text" maxlength="10" placeholder="이름" aria-label="이름" autocomplete="off"></div>
     <div class="gLabel">난이도</div>
     <div class="lvGrid" id="lvGrid"></div>
     <p class="gBest" id="gBest"></p>
@@ -476,6 +484,7 @@ body:has(#view3d[style*="flex"]) .gBanner{bottom:auto;top:64px}
     <h2 class="gTitle" id="gEndT">FINAL</h2>
     <div class="gFinal"><b id="gEndScore">0</b><span>점</span></div>
     <div class="gRank" id="gEndRank"></div>
+    <div class="gSend" id="gEndSend"></div>
     <div class="gDrives" id="gEndDrives"></div>
     <p class="gBest" id="gEndBest"></p>
     <div class="gCode" id="gEndCode"></div>
@@ -1884,7 +1893,26 @@ function endGame(){ setPhase('call'); hideBanner(); if(V3.open) close3d(); const
   gEndDrives.innerHTML=G.drives.map((x,i)=>`<div class="d ${x.res==='TD'?'td':'no'}"><b>드라이브 ${i+1}</b><span>${x.res==='TD'?`${x.downs}번째 공격에 터치다운`+(x.conv?` · 추가점 ${x.conv}`:''):'4번 안에 실패'}</span><span class="p">${x.pts}점</span></div>`).join('');
   gEndBest.textContent = isBest ? (prev>=0?`새 최고 기록! (전: ${prev}점)`:'첫 기록이에요!') : `이 문제 최고 기록: ${prev}점`;
   gEndCode.textContent=`기록 코드  Q${G.seed}-L${G.lv+1}-${G.score}`;
-  gEnd.classList.add('show'); }
+  gEnd.classList.add('show'); submitScore(); }
+
+/* ---------- 기록 보내기 (순위표) ---------- */
+function myName(){ try{ const m=JSON.parse(store.get('fg.me')||'null'); return m&&m.c&&m.n&&m.name?m:null; }catch(e){ return null; } }
+function readName(){ const c=+inpC.value, n=+inpN.value, name=inpName.value.trim().slice(0,10);
+  if(!inpC.value&&!inpN.value&&!name){ store.del('fg.me'); return {ok:true,me:null}; }
+  if(!(c>=1&&c<=30&&n>=1&&n<=60&&name)) return {ok:false};
+  const m={c,n,name}; store.set('fg.me',JSON.stringify(m)); return {ok:true,me:m}; }
+function pending(){ try{ const a=JSON.parse(store.get('fg.pending')||'[]'); return Array.isArray(a)?a.filter(x=>x&&x.id&&Date.now()-x.at<3*24*3600*1000):[]; }catch(e){ return []; } }
+function setPending(a){ if(a.length) store.set('fg.pending',JSON.stringify(a)); else store.del('fg.pending'); }
+function sendLine(cls,html){ gEndSend.className='gSend show '+(cls||''); gEndSend.innerHTML=html; }
+async function sendScores(curId){ // 못 보낸 기록은 이 기기에 남겨 두었다가 다음에 다시 보냄
+  for(const rec of pending()){ const mine=rec.id===curId; if(mine) sendLine('','순위표에 기록을 올리는 중…');
+    try{ const {at,...body}=rec; const r=await api('score_submit',body,{tries:3,timeout:15000});
+      setPending(pending().filter(x=>x.id!==rec.id));
+      if(mine) r.ok ? sendLine('ok',`순위표에 올라갔어요 · 문제 ${rec.q}에서 지금 <b>${r.place}위</b> / ${r.players}명`) : sendLine('bad',esc(r.msg||'기록을 받지 않았어요')); }
+    catch(e){ if(mine){ sendLine('bad',`${esc(e.message)} <button id="btnResend">다시 보내기</button>`); btnResend.onclick=()=>sendScores(curId); } if(e.nourl) return; } } }
+function submitScore(){ if(!G.me){ sendLine('','연습 경기라 순위표에는 올라가지 않아요'); return; }
+  const rec={q:G.seed,c:G.me.c,n:G.me.n,name:G.me.name,lv:G.lv+1,score:G.score,td:G.drives.filter(x=>x.res==='TD').length,id:uid(),at:Date.now()};
+  setPending([...pending(),rec]); sendScores(rec.id); }
 
 /* ---------- 시작 화면 ---------- */
 function todaySeed(){ const d=new Date(); return (d.getMonth()+1)*100+d.getDate(); }
@@ -1892,12 +1920,13 @@ function renderStart(){ lvGrid.innerHTML=''; LEVELS.forEach((L,i)=>{ const b=doc
     b.innerHTML=`<span class="st">${'★'.repeat(L.star)}${'☆'.repeat(4-L.star)}</span><b>${L.n}</b><small>${L.desc}</small>`;
     b.onclick=()=>{ G.lv=i; renderStart(); }; lvGrid.append(b); });
   const sd=+inpSeed.value||0, b=store.get(`fg.best.${sd}.${G.lv}`); gBest.textContent = b!=null ? `문제 ${sd} · ${LEVELS[G.lv].n} 최고 기록 ${b}점` : ''; }
-function openStart(){ hideBanner(); gEnd.classList.remove('show'); renderStart(); gStart.classList.add('show'); }
+function openStart(){ hideBanner(); gEnd.classList.remove('show'); renderStart(); const m=myName(); inpC.value=m?m.c:''; inpN.value=m?m.n:''; inpName.value=m?m.name:''; gStart.classList.add('show'); }
 function gameBoot(){ const q=new URLSearchParams(location.search);
   inpSeed.value = q.get('q') && /^\d{1,6}$/.test(q.get('q')) ? q.get('q') : todaySeed();
   const lv=+q.get('lv'); if(lv>=1 && lv<=4) G.lv=lv-1;
   inpSeed.oninput=()=>{ inpSeed.value=inpSeed.value.replace(/\D/g,''); renderStart(); };
-  btnGo.onclick=()=>{ G.seed=+inpSeed.value||todaySeed(); newGame(); };
+  for(const el of [inpC,inpN]) el.oninput=()=>{ el.value=el.value.replace(/\D/g,''); };
+  btnGo.onclick=()=>{ const w=readName(); if(!w.ok){ toast('반·번호·이름을 모두 적거나, 모두 비워 주세요'); return; } G.me=w.me; G.seed=+inpSeed.value||todaySeed(); newGame(); };
   btnAgain.onclick=()=>newGame(); btnHome.onclick=openStart;
   btnMenu.onclick=()=>{ if(G.drives.length||G.cur&&G.cur.plays){ if(!confirm('경기를 그만두고 처음 화면으로 갈까요?')) return; } openStart(); };
   const snap0=btnSnap.onclick; btnSnap.onclick=()=>{ if(!snapGame()) return; snap0(); btn3d.disabled=true;
@@ -1906,7 +1935,7 @@ function gameBoot(){ const q=new URLSearchParams(location.search);
     btn3d.disabled=true; btn3d.textContent='3D 준비 중…'; // 3D를 먼저 다 받아 놓고 스냅 (받는 동안 플레이가 흘러가지 않게)
     try{ await loadThree(); await loadAssets(); }catch(e){ setPhase('call'); toast('3D 부품을 받지 못했어요. 2D로 플레이해 주세요'); return; }
     if(G.phase!=='call') return; btnSnap.onclick(); if(G.phase==='live') open3d(); else setPhase('call'); };
-  applyGoal(START_G); setPhase('call'); renderSB(); openStart(); }
+  applyGoal(START_G); setPhase('call'); renderSB(); openStart(); if(pending().length) sendScores(null); }
 
 /* 시작 */
 const DEFS0=JSON.parse(JSON.stringify(DEFS));
