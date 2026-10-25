@@ -123,7 +123,9 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
     <input id="inpQ" type="tel" inputmode="numeric" maxlength="6" autocomplete="off">
     <label for="selC">반 <small>이 반 기록만 보기</small></label>
     <select id="selC"><option value="">전체</option></select>
-    <label for="inpKey">교사 열쇠 <small>구글 시트 [작전판 &gt; 교사 열쇠 보기]</small></label>
+    <label for="inpUrl">기록 저장소 주소 <small>Apps Script 웹 앱 주소(…/exec)</small></label>
+    <input id="inpUrl" type="text" autocomplete="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+    <label for="inpKey">교사 열쇠 <small>FLAG GAME 시트 [FLAG GAME &gt; 교사 열쇠 보기]</small></label>
     <input id="inpKey" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">
     <label class="chk"><input type="checkbox" id="chkMask"> 이름 가운데 글자 가리기 (김*나)</label>
     <p class="msg" id="setMsg"></p>
@@ -132,13 +134,13 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid 
 </div>
 
 <script>
-/* 작전 저장소 주소: 공간작전판·게임과 같은 Apps Script 웹 앱 */
-const STORE_URL = 'https://script.google.com/macros/s/AKfycbwGWT_LQ9aOliP8iT4pjGSKPjEFNMAtPuFgKTUa--ILpqv_8GJb4EfiGFOTGrYQ_ByWwA/exec';
+/* 기록 저장소: FLAG GAME 전용 시트의 Apps Script 웹 앱 주소 (index.html의 GAME_STORE_URL과 같게) */
+const STORE_URL_DEFAULT = '';
 const LV = ['루키','주전','프로','올스타'], POLL_MS = 5000, LIST_ROWS = 12;
 const store={ get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }, set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} } };
 const $=id=>document.getElementById(id);
 const esc=x=>String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const B={ q:0, c:'', key:'', mask:false, rows:[], prevPlace:{}, leader:null, timer:0, fails:0 };
+const B={ url:'', q:0, c:'', key:'', mask:false, rows:[], prevPlace:{}, leader:null, timer:0, fails:0 };
 
 function todaySeed(){ const d=new Date(); return (d.getMonth()+1)*100+d.getDate(); }
 function maskName(n){ n=String(n); if(!B.mask||n.length<2) return n; return n.length===2 ? n[0]+'*' : n[0]+'*'.repeat(n.length-2)+n[n.length-1]; }
@@ -146,7 +148,7 @@ const idOf=r=>r.c+'-'+r.n+'-'+r.name;
 
 async function fetchBoard(){
   const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),15000);
-  try{ const r=await fetch(STORE_URL,{method:'POST',body:JSON.stringify({action:'score_board',key:B.key,q:B.q}),headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',signal:ctl.signal});
+  try{ const r=await fetch(B.url,{method:'POST',body:JSON.stringify({action:'score_board',key:B.key,q:B.q}),headers:{'Content-Type':'text/plain;charset=utf-8'},redirect:'follow',signal:ctl.signal});
     clearTimeout(tm); if(!r.ok) throw new Error('HTTP '+r.status); return await r.json(); }
   finally{ clearTimeout(tm); } }
 
@@ -195,22 +197,23 @@ function fillClasses(cs){ const sel=$('selC'), have=[...sel.options].map(o=>o.va
 
 function header(){ $('ttl').innerHTML=`실시간 순위 · <b>문제 ${B.q}</b>`+(B.c?` · <b>${B.c}반</b>`:'');
   const base=location.href.replace(/board\.html.*$/,''); $('join').innerHTML=`게임 주소<b>${esc(base.replace(/^https?:\/\//,''))}?q=${B.q}</b>`; }
-function openSetup(msg){ clearTimeout(B.timer); $('inpQ').value=B.q||todaySeed(); $('selC').value=B.c; $('inpKey').value=B.key; $('chkMask').checked=B.mask; $('setMsg').textContent=msg||''; $('setup').classList.add('show'); }
+function openSetup(msg){ clearTimeout(B.timer); $('inpQ').value=B.q||todaySeed(); $('selC').value=B.c; $('inpKey').value=B.key; $('inpUrl').value=B.url; $('chkMask').checked=B.mask; $('setMsg').textContent=msg||''; $('setup').classList.add('show'); }
 $('btnSet').onclick=()=>openSetup();
 $('inpQ').oninput=e=>{ e.target.value=e.target.value.replace(/\D/g,''); };
-$('btnStart').onclick=()=>{ const q=+$('inpQ').value, key=$('inpKey').value.trim().toUpperCase();
+$('btnStart').onclick=()=>{ const q=+$('inpQ').value, key=$('inpKey').value.trim().toUpperCase(), url=$('inpUrl').value.trim();
+  if(!/^https:\/\/script\.google\.com\/.+\/exec$/.test(url)){ $('setMsg').textContent='기록 저장소 주소(…/exec)를 넣어 주세요'; return; }
   if(!(q>=1)){ $('setMsg').textContent='문제 번호를 넣어 주세요'; return; }
   if(!key){ $('setMsg').textContent='교사 열쇠를 넣어 주세요'; return; }
-  Object.assign(B,{q,key,c:$('selC').value,mask:$('chkMask').checked,rows:[],prevPlace:{},leader:null}); $('list').innerHTML='';
-  store.set('sb.tkey',key); store.set('fg.board',JSON.stringify({c:B.c,mask:B.mask}));
+  Object.assign(B,{url,q,key,c:$('selC').value,mask:$('chkMask').checked,rows:[],prevPlace:{},leader:null}); $('list').innerHTML='';
+  store.set('fg.tkey',key); store.set('fg.storeUrl',url); store.set('fg.board',JSON.stringify({c:B.c,mask:B.mask}));
   const u=new URL(location.href); u.searchParams.set('q',q); if(B.c) u.searchParams.set('c',B.c); else u.searchParams.delete('c'); history.replaceState(null,'',u);
   $('setup').classList.remove('show'); header(); setLive(false,'불러오는 중…'); tick(); };
 
 (function boot(){ const p=new URLSearchParams(location.search); let saved={}; try{ saved=JSON.parse(store.get('fg.board')||'{}')||{}; }catch(e){}
-  B.q=/^\d{1,6}$/.test(p.get('q')||'')?+p.get('q'):todaySeed(); B.c=p.get('c')||saved.c||''; B.mask=!!saved.mask; B.key=store.get('sb.tkey')||'';
+  B.q=/^\d{1,6}$/.test(p.get('q')||'')?+p.get('q'):todaySeed(); B.c=p.get('c')||saved.c||''; B.mask=!!saved.mask; B.key=store.get('fg.tkey')||''; B.url=store.get('fg.storeUrl')||STORE_URL_DEFAULT;
   if(B.c){ const o=document.createElement('option'); o.value=B.c; o.textContent=B.c+'반'; $('selC').append(o); }
   header(); render([]); B.rows=[];
-  if(B.key && p.get('q')) { setLive(false,'불러오는 중…'); tick(); } else openSetup(); })();
+  if(B.url && B.key && p.get('q')) { setLive(false,'불러오는 중…'); tick(); } else openSetup(); })();
 window.addEventListener('resize',()=>{ if(B.rows.length) render(B.rows.filter(r=>r.c)); });
 </script>
 </body>

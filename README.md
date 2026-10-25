@@ -31,7 +31,7 @@
 - 학생: 시작 화면에 반·번호·이름 → 경기를 끝내면 점수가 자동으로 올라감 (비우면 연습 경기)
 - TV: `board.html?q=1104` → 문제 번호·교사 열쇠 → 5초마다 새로고침, 순위가 바뀌면 올라가는 애니메이션, 새 1위 축하
 - 순위 = 랭킹 점수(점수 × 난이도 배율), 한 사람은 최고 기록 1개
-- 저장소: 공간작전판과 같은 Apps Script (`bbonng/flagboard`의 `apps-script/Code.gs`, `score_submit`·`score_board`)
+- 저장소: 수업용과 따로 만든 FLAG GAME 시트 (`apps-script/Code.gs`, 설정은 `apps-script/설정안내.md`)
 - 못 보낸 기록은 기기에 남았다가 다음에 다시 보냄
 
 ## 다음 단계 (예정)

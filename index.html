@@ -1646,7 +1646,7 @@ function decodePlay(code){ const o=typeof code==='string'?JSON.parse(code):code;
   S.selected=null; clearSim(); renderChips(); renderGrid(); renderRun(); draw(); }
 
 /* 저장소와 주고받기: 응답이 늦거나 끊기면 몇 번 더 시도 */
-async function api(action,body,opt){ opt=opt||{}; const url=storeUrl();
+async function api(action,body,opt){ opt=opt||{}; const url=opt.url!==undefined?opt.url:storeUrl();
   if(!url){ const e=new Error('작전 저장소가 아직 연결되지 않았어요. 선생님께 알려 주세요'); e.nourl=true; throw e; }
   const tries=opt.tries||2; let last;
   for(let i=0;i<tries;i++){
@@ -1780,6 +1780,8 @@ const LEVELS = [
    desc:'위장 + 같은 라우트를 반복하면 수비가 읽어요'},
 ];
 const DRIVES = 5, START_G = 25, CONV_G = {1:5, 2:12};
+/* 점수 저장소: 수업용 작전 저장소와 따로 만든 FLAG GAME 시트의 웹 앱 주소(…/exec) (apps-script/설정안내.md) */
+const GAME_STORE_URL = '';
 const G = { lv:1, seed:0, drive:1, down:1, goalNow:START_G, conv:null, phase:'call', score:0, drives:[], cur:null, used:{}, shown:null, actual:null, say:'', learned:'' };
 
 const fmtY = v => (Math.round(v*2)/2).toString();
@@ -1906,10 +1908,10 @@ function setPending(a){ if(a.length) store.set('fg.pending',JSON.stringify(a)); 
 function sendLine(cls,html){ gEndSend.className='gSend show '+(cls||''); gEndSend.innerHTML=html; }
 async function sendScores(curId){ // 못 보낸 기록은 이 기기에 남겨 두었다가 다음에 다시 보냄
   for(const rec of pending()){ const mine=rec.id===curId; if(mine) sendLine('','순위표에 기록을 올리는 중…');
-    try{ const {at,...body}=rec; const r=await api('score_submit',body,{tries:3,timeout:15000});
+    try{ const {at,...body}=rec; const r=await api('score_submit',body,{tries:3,timeout:15000,url:GAME_STORE_URL});
       setPending(pending().filter(x=>x.id!==rec.id));
       if(mine) r.ok ? sendLine('ok',`순위표에 올라갔어요 · 문제 ${rec.q}에서 지금 <b>${r.place}위</b> / ${r.players}명`) : sendLine('bad',esc(r.msg||'기록을 받지 않았어요')); }
-    catch(e){ if(mine){ sendLine('bad',`${esc(e.message)} <button id="btnResend">다시 보내기</button>`); btnResend.onclick=()=>sendScores(curId); } if(e.nourl) return; } } }
+    catch(e){ if(mine){ if(e.nourl) sendLine('bad','기록 저장소가 아직 연결되지 않았어요. 기록은 이 기기에 보관해 둘게요'); else { sendLine('bad',`${esc(e.message)} <button id="btnResend">다시 보내기</button>`); btnResend.onclick=()=>sendScores(curId); } } if(e.nourl) return; } } }
 function submitScore(){ if(!G.me){ sendLine('','연습 경기라 순위표에는 올라가지 않아요'); return; }
   const rec={q:G.seed,c:G.me.c,n:G.me.n,name:G.me.name,lv:G.lv+1,score:G.score,td:G.drives.filter(x=>x.res==='TD').length,id:uid(),at:Date.now()};
   setPending([...pending(),rec]); sendScores(rec.id); }
