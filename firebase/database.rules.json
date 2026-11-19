@@ -1,0 +1,16 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "ping": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "!newData.exists() || (newData.hasChildren(['at']) && newData.child('at').val() === now)",
+        "at": { ".validate": true },
+        "$other": { ".validate": false }
+      }
+    }
+  }
+}

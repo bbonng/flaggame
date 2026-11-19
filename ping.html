@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FLAG GAME 연결 확인</title>
+<!--
+  대전 모드 M0: 학교 기기에서 Firebase(익명 로그인 + Realtime Database)에 붙는지 확인하는 페이지.
+  index.html·board.html과 아무것도 공유하지 않는다. (localStorage 키도 'vs.'로 따로 씀)
+  설정값: 아래 FIREBASE_CONFIG에 넣어 두거나, 화면의 [설정값 넣기]에 붙여 넣으면 이 기기에만 저장된다.
+  보안 규칙: firebase/database.rules.json
+-->
+<style>
+:root{
+  --board:#f5f6f2; --panel:#ffffff; --line:#d9ddd3; --ink:#1e2a22; --ink-2:#5b6a5f; --ink-3:#66736a;
+  --turf:#3a7a49; --chalk:#f2f4ea; --off:#ff7a1a; --def:#2f6fe0;
+  --open:#2f9a52; --tight:#d69b12; --shut:#c9422f;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:'Apple SD Gothic Neo','Noto Sans KR','Malgun Gothic',system-ui,sans-serif;background:var(--board);color:var(--ink);font-size:15px;line-height:1.5}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:focus-visible,textarea:focus-visible{outline:3px solid var(--def);outline-offset:2px}
+header{display:flex;align-items:baseline;gap:12px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:18px;font-weight:800;letter-spacing:-.5px}
+header span{font-size:13px;color:var(--ink-2)}
+main{max-width:640px;margin:0 auto;padding:16px}
+.hero{background:var(--turf);color:var(--chalk);border-radius:14px;padding:22px 20px;text-align:center}
+.hero b{display:block;font-size:30px;font-weight:900;letter-spacing:-1px}
+.hero small{display:block;font-size:14px;opacity:.9;margin-top:4px}
+.hero.ok{background:var(--open)} .hero.bad{background:var(--shut)} .hero.wait{background:#4b5a50}
+ol{list-style:none;margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+li{display:grid;grid-template-columns:28px 1fr auto;gap:8px;align-items:start;padding:11px 14px;border-top:1px solid var(--line)}
+li:first-child{border-top:0}
+li i{font-style:normal;font-weight:800;text-align:center}
+li .t{font-weight:700} li .d{grid-column:2/4;font-size:13px;color:var(--ink-2);word-break:break-all}
+li .v{font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;text-align:right}
+li.ok i{color:var(--open)} li.bad i{color:var(--shut)} li.run i{color:var(--tight)} li.idle i{color:var(--ink-3)}
+li.bad .d{color:var(--shut)}
+.live{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;align-items:center;gap:14px}
+.live b{font-size:34px;font-weight:900;color:var(--def);font-variant-numeric:tabular-nums;min-width:2ch;text-align:center}
+.live span{font-size:13px;color:var(--ink-2)}
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.acts button{padding:10px 16px;border-radius:10px;background:var(--panel);border:1px solid var(--line);font-weight:700}
+.acts button.pri{background:var(--off);border-color:var(--off);color:#fff}
+#cfgBox{display:none;margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+#cfgBox.show{display:block}
+#cfgBox p{font-size:13px;color:var(--ink-2);margin-bottom:8px}
+#cfgBox textarea{width:100%;min-height:150px;font:13px/1.4 ui-monospace,Menlo,Consolas,monospace;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--board);color:var(--ink)}
+#info{margin-top:14px;font-size:12px;color:var(--ink-3);word-break:break-all}
+@media (prefers-color-scheme:dark){
+  :root{--board:#141a16;--panel:#1d2520;--line:#2f3a33;--ink:#e8ede6;--ink-2:#a9b5ac;--ink-3:#8c998f}
+}
+</style>
+</head>
+<body>
+<header><h1>FLAG GAME</h1><span>대전 모드 연결 확인</span></header>
+<main>
+  <div class="hero wait" id="hero"><b id="heroBig">확인 중…</b><small id="heroSub">잠깐만 기다려 주세요</small></div>
+
+  <ol id="steps"></ol>
+
+  <div class="live" id="liveBox" hidden>
+    <b id="liveN">–</b>
+    <span>지금 이 페이지를 열어 둔 기기 수<br>다른 기기에서도 열면 몇 초 안에 숫자가 같이 바뀌어야 해요</span>
+  </div>
+
+  <div class="acts">
+    <button class="pri" id="btnAgain">다시 확인</button>
+    <button id="btnCfg">설정값 넣기</button>
+    <button id="btnCopy">결과 복사</button>
+  </div>
+
+  <div id="cfgBox">
+    <p>Firebase 콘솔 → 프로젝트 설정 → 내 앱에 나오는 <b>const firebaseConfig = { … }</b> 부분을 그대로 붙여 넣으세요. 이 기기에만 저장돼요.</p>
+    <textarea id="cfgIn" spellcheck="false" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;…&quot;,&#10;  authDomain: &quot;…&quot;,&#10;  databaseURL: &quot;…&quot;,&#10;  …&#10;};"></textarea>
+    <div class="acts"><button class="pri" id="btnCfgSave">저장하고 확인</button><button id="btnCfgClear">지우기</button></div>
+  </div>
+
+  <div id="info"></div>
+</main>
+
+<script type="module">
+/* ---------- 설정 ---------- */
+// 선생님 Firebase 웹 앱 설정값. 비어 있으면 화면에서 붙여 넣은 값(이 기기 저장)을 쓴다.
+// (웹 앱 설정값은 비밀번호가 아니다. 접근 제한은 보안 규칙이 맡는다.)
+const FIREBASE_CONFIG = null;
+const SDK_VER = '12.12.1';
+const SDK = n => `https://www.gstatic.com/firebasejs/${SDK_VER}/firebase-${n}.js`;
+const TIMEOUT = 12000;   // 단계마다 기다리는 최대 시간(ms)
+const CFG_KEY = 'vs.fbConfig';
+const KEYS = ['apiKey','authDomain','databaseURL','projectId','storageBucket','appId'];
+
+const store = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} } };
+const $ = id => document.getElementById(id);
+const esc = x => String(x==null?'':x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* 콘솔의 JS 객체 모양( apiKey: "…", )도, JSON도 받는다 */
+function parseConfig(text){
+  const o={};
+  for(const k of [...KEYS,'messagingSenderId','measurementId']){
+    const m=String(text).match(new RegExp(`["']?${k}["']?\\s*:\\s*["']([^"']+)["']`));
+    if(m) o[k]=m[1].trim(); }
+  return o; }
+function savedConfig(){ try{ const o=JSON.parse(store.get(CFG_KEY)||'null'); return o&&typeof o==='object'?o:null; }catch(e){ return null; } }
+function currentConfig(){ return FIREBASE_CONFIG || savedConfig(); }
+
+/* ---------- 단계 표시 ---------- */
+const STEPS = [
+  ['net',   '인터넷'],
+  ['sdk',   'Firebase 부품 받기'],
+  ['cfg',   '설정값'],
+  ['auth',  '익명 로그인'],
+  ['conn',  '데이터베이스 연결'],
+  ['clock', '서버 시각 맞추기'],
+  ['rw',    '쓰기 → 읽기 왕복'],
+  ['live',  '실시간 알림 받기'],
+];
+const ICON = {ok:'✓', bad:'✕', run:'…', idle:'·'};
+const state = {};
+function renderSteps(){
+  $('steps').innerHTML = STEPS.map(([k,t])=>{ const s=state[k]||{st:'idle'};
+    return `<li class="${s.st}"><i>${ICON[s.st]}</i><span class="t">${esc(t)}</span><span class="v">${esc(s.v||'')}</span>${s.d?`<span class="d">${esc(s.d)}</span>`:''}</li>`; }).join(''); }
+function set(k,st,v,d){ state[k]={st,v,d}; renderSteps(); }
+function hero(cls,big,sub){ $('hero').className='hero '+cls; $('heroBig').textContent=big; $('heroSub').textContent=sub||''; }
+
+function withTimeout(p,ms,msg){ let t; return Promise.race([p,new Promise((_,rej)=>{ t=setTimeout(()=>{ const e=new Error(msg||'시간 초과'); e.code='timeout'; rej(e); },ms); })]).finally(()=>clearTimeout(t)); }
+const ms = t0 => `${Math.round(performance.now()-t0)}ms`;
+
+/* Firebase 오류를 사람 말로 */
+function explain(e){ const c=(e&&e.code)||'', m=(e&&e.message)||String(e);
+  if(c==='auth/operation-not-allowed' || c==='auth/admin-restricted-operation') return 'Firebase 콘솔 → Authentication → 로그인 방법에서 "익명"을 켜 주세요';
+  if(c==='auth/configuration-not-found') return 'Authentication이 아직 시작되지 않았어요. 콘솔에서 Authentication → 시작하기를 눌러 주세요';
+  if(c==='auth/invalid-api-key' || c==='auth/api-key-not-valid.-please-pass-a-valid-api-key.') return 'apiKey가 맞지 않아요. 설정값을 다시 붙여 넣어 주세요';
+  if(c==='auth/unauthorized-domain') return `이 주소(${location.hostname})가 허용되지 않았어요. Authentication → 설정 → 승인된 도메인에 추가해 주세요`;
+  if(c==='auth/network-request-failed') return 'Google 로그인 서버에 닿지 못했어요(학교망 차단 가능성)';
+  if(/permission_denied/i.test(c) || /permission_denied/i.test(m)) return '보안 규칙이 막았어요. firebase/database.rules.json 내용을 Realtime Database → 규칙에 붙여 넣었는지 확인해 주세요';
+  if(c==='timeout') return m;
+  return m; }
+
+/* ---------- 확인 ---------- */
+let fb=null, cleanup=[], running=false;
+async function stopAll(){ for(const f of cleanup.splice(0)){ try{ await f(); }catch(e){} } }
+
+async function run(){
+  if(running) return; running=true;
+  await stopAll(); for(const k of Object.keys(state)) delete state[k]; renderSteps();
+  $('liveBox').hidden=true; hero('wait','확인 중…','잠깐만 기다려 주세요');
+  const fail=(k,msg,v)=>{ set(k,'bad',v,msg); hero('bad','연결 안 됨',`"${STEPS.find(s=>s[0]===k)[1]}" 단계에서 멈췄어요`); running=false; };
+  try{
+    // 1. 인터넷
+    set('net','run'); if(navigator.onLine===false) return fail('net','이 기기가 오프라인이에요. 와이파이를 확인해 주세요');
+    set('net','ok', navigator.onLine===undefined?'':'온라인');
+
+    // 2. SDK
+    set('sdk','run'); let t0=performance.now();
+    if(!fb){ try{
+        const [app,auth,db] = await withTimeout(Promise.all([import(SDK('app')),import(SDK('auth')),import(SDK('database'))]),TIMEOUT,'www.gstatic.com에서 Firebase 부품을 받지 못했어요(학교망 차단 가능성)');
+        fb={app,auth,db}; }
+      catch(e){ return fail('sdk', e.code==='timeout'?e.message:'www.gstatic.com에서 Firebase 부품을 받지 못했어요(학교망 차단 가능성)'); } }
+    set('sdk','ok',`v${SDK_VER} · ${ms(t0)}`);
+
+    // 3. 설정값
+    set('cfg','run'); const cfg=currentConfig();
+    if(!cfg) { $('cfgBox').classList.add('show'); return fail('cfg','설정값이 아직 없어요. 아래 [설정값 넣기]에 붙여 넣어 주세요'); }
+    const miss=['apiKey','authDomain','databaseURL','projectId','appId'].filter(k=>!cfg[k]);
+    if(miss.length){ $('cfgBox').classList.add('show'); return fail('cfg',`빠진 값: ${miss.join(', ')} (databaseURL은 Realtime Database를 만든 뒤에 생겨요)`); }
+    set('cfg','ok',cfg.projectId, `데이터베이스: ${cfg.databaseURL}${FIREBASE_CONFIG?'':' (이 기기에 저장된 값)'}`);
+
+    // 4. 익명 로그인
+    set('auth','run'); t0=performance.now();
+    const name='ping-'+Date.now();
+    const app=fb.app.initializeApp(cfg,name); cleanup.push(()=>fb.app.deleteApp(app));
+    const auth=fb.auth.getAuth(app);
+    let user; try{ user=(await withTimeout(fb.auth.signInAnonymously(auth),TIMEOUT,'로그인 서버가 대답하지 않아요(학교망 차단 가능성)')).user; }
+    catch(e){ return fail('auth',explain(e)); }
+    set('auth','ok',ms(t0),`익명 번호 ${user.uid.slice(0,6)}… (이름은 저장하지 않아요)`);
+
+    // 5. DB 연결
+    set('conn','run'); t0=performance.now();
+    const db=fb.db.getDatabase(app), {ref,onValue,set:dbSet,get,remove,serverTimestamp,onDisconnect,goOffline}=fb.db;
+    cleanup.unshift(()=>goOffline(db));
+    try{ await withTimeout(new Promise(res=>{ const off=onValue(ref(db,'.info/connected'),s=>{ if(s.val()===true){ off(); res(); } }); }),TIMEOUT,
+        '데이터베이스에 닿지 못했어요. databaseURL이 맞는지, 학교망이 *.firebasedatabase.app / *.firebaseio.com을 막는지 확인해 주세요'); }
+    catch(e){ return fail('conn',explain(e)); }
+    set('conn','ok',ms(t0), new URL(cfg.databaseURL).host);
+
+    // 6. 서버 시각 차이 (작전 시계를 양쪽 기기에서 맞추는 데 씀)
+    set('clock','run');
+    const offset=await new Promise(res=>{ const off=onValue(ref(db,'.info/serverTimeOffset'),s=>{ off(); res(+s.val()||0); }); });
+    const big=Math.abs(offset)>=2000;
+    set('clock','ok',`${offset>=0?'+':''}${(offset/1000).toFixed(1)}초`, big?'이 기기 시계가 서버와 많이 달라요. 대전에서는 서버 시각으로 맞추니 괜찮아요':'');
+
+    // 7. 쓰기 → 읽기 왕복
+    set('rw','run'); t0=performance.now();
+    const mine=ref(db,`ping/${user.uid}`);
+    try{
+      await withTimeout(dbSet(mine,{at:serverTimestamp()}),TIMEOUT,'쓰기가 끝나지 않아요');
+      const s=await withTimeout(get(mine),TIMEOUT,'읽기가 끝나지 않아요');
+      if(!s.exists()||typeof s.val().at!=='number') throw new Error('쓴 값을 다시 읽지 못했어요');
+    }catch(e){ return fail('rw',explain(e)); }
+    const rt=Math.round(performance.now()-t0);
+    set('rw','ok',`${rt}ms`, rt>1500?'조금 느려요. 수업 중 지연이 느껴질 수 있어요':'');
+    cleanup.unshift(()=>remove(mine));
+    onDisconnect(mine).remove();
+
+    // 8. 실시간: 다른 기기가 들어오고 나가는 게 보이는지
+    set('live','run');
+    let first=true;
+    const offLive=onValue(ref(db,'ping'),s=>{ const n=s.exists()?Object.keys(s.val()).length:0;
+      $('liveN').textContent=n; $('liveBox').hidden=false;
+      if(first){ first=false; set('live','ok','',`다른 기기에서도 이 페이지를 열어 숫자가 함께 바뀌는지 보세요`); } },
+      e=>{ set('live','bad','',explain(e)); });
+    cleanup.unshift(offLive);
+
+    hero('ok','연결됨','이 기기에서 대전 모드를 쓸 수 있어요');
+  }catch(e){
+    console.error(e); const k=STEPS.find(([k])=>state[k]&&state[k].st==='run'); fail(k?k[0]:'net',explain(e));
+  }
+  running=false;
+}
+
+/* ---------- 버튼 ---------- */
+$('btnAgain').onclick=run;
+$('btnCfg').onclick=()=>{ const b=$('cfgBox'); b.classList.toggle('show'); const c=savedConfig(); if(c&&!$('cfgIn').value) $('cfgIn').value=JSON.stringify(c,null,2); };
+$('btnCfgSave').onclick=()=>{ const o=parseConfig($('cfgIn').value);
+  if(!o.apiKey||!o.projectId){ alert('apiKey·projectId를 찾지 못했어요. 콘솔의 firebaseConfig 부분을 통째로 붙여 넣어 주세요'); return; }
+  store.set(CFG_KEY,JSON.stringify(o)); $('cfgBox').classList.remove('show'); run(); };
+$('btnCfgClear').onclick=()=>{ store.del(CFG_KEY); $('cfgIn').value=''; run(); };
+$('btnCopy').onclick=async()=>{
+  const txt=[`FLAG GAME 연결 확인 · ${new Date().toLocaleString('ko-KR')}`, $('heroBig').textContent,
+    ...STEPS.map(([k,t])=>{ const s=state[k]||{st:'idle'}; return `${ICON[s.st]} ${t} ${s.v||''} ${s.d||''}`.trim(); }),
+    navigator.userAgent].join('\n');
+  try{ await navigator.clipboard.writeText(txt); $('btnCopy').textContent='복사했어요'; }catch(e){ prompt('아래 내용을 복사하세요',txt); }
+  setTimeout(()=>$('btnCopy').textContent='결과 복사',1600); };
+window.addEventListener('online',run);
+$('info').textContent = navigator.userAgent;
+renderSteps(); run();
+</script>
+</body>
+</html>
