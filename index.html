@@ -1033,6 +1033,7 @@ function windowHint(rid,t0){ if(!S.win) return '';
 
 function throwTo(rid){
   if(G.phase!=='live' || S.pass) return;
+  { const f=frameAt(S.t); if(f.holder!=='QB' && !(S.sim.sackT!=null && S.t>=S.sim.sackT)){ hint.textContent='공을 든 선수가 끝까지 달려요'; return; } } // 핸드오프 뒤에는 패스 불가(2D 입력과 같은 규칙)
   stopPlay(); const t=Math.max(0.2,Math.round(S.t*10)/10); S.t=t; scrub.value=Math.round(t*100);
   const s0=separation(rid,t), f=frameAt(t);
   if(f.holder==='QB' && f.off.QB[1]>0){ hint.textContent='QB가 스크리미지 라인을 넘었어요. 라인을 넘으면 패스는 못 해요 — QB를 누르면 여기서 기록합니다'; draw(); return; }
