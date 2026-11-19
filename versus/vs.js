@@ -390,8 +390,9 @@ async function doReveal(st){
 async function secCheck(st){
   if(VS.secK===st.k) return; VS.secK=st.k;
   try{ const v=(await fb.get(fb.ref(fb.db,`picks/${VS.code}/${st.k}/${st.sit.def}`))).val();
-    toast(v ? `✗ 보안 문제: 스냅 전에 수비 선택(${v.actual})이 읽혔어요!` : '? 수비 선택이 비어 있어요', 5000); console.error('[VS] 보안 확인', v); }
-  catch(e){ toast('✓ 보안 확인: 스냅 전에는 수비의 실제 선택을 읽을 수 없어요', 3500); console.log('[VS] 보안 확인 통과', e.message); }
+    VS.sec = v ? 'bad' : 'empty'; console.error('[VS] 보안 확인', v); }
+  catch(e){ VS.sec='ok'; VS.secN=(VS.secN||0)+1; console.log('[VS] 보안 확인 통과', e.message); }
+  renderStat(VS.st, roleOf(VS.st.sit));
 }
 
 /* ---------- 결과 카드 ---------- */
@@ -451,7 +452,8 @@ function showFinal(st){
 function renderStat(st, role){
   const op=oppOf(st), on=!!((VS.room.online||{})[op]);
   vsStat.innerHTML = `${role?`<span class="role ${role}">${role==='off'?'내가 공격':'내가 수비'}</span>`:''}<span class="room">방 ${esc(VS.code)}</span>`
-    + `<span class="opp ${on?'':'off'}">${on?'상대 연결됨':'상대 연결 끊김'}</span>`;
+    + `<span class="opp ${on?'':'off'}">${on?'상대 연결됨':'상대 연결 끊김'}</span>`
+    + (qs.has('debug') ? `<span class="sec ${VS.sec||''}">${ VS.sec==='ok' ? `✓ 보안 확인 ${VS.secN}번 통과 (스냅 전 수비 선택을 못 읽음)` : VS.sec==='bad' ? '✗ 보안 문제: 스냅 전에 수비 선택이 읽혔어요!' : VS.sec==='empty' ? '? 보안 확인: 수비 선택이 비어 있음' : '보안 확인: 내가 공격할 때 확인해요' }</span>` : '');
 }
 function renderSB(){
   const st=VS.st; if(!st || st.phase==='lobby') return;

@@ -66,3 +66,5 @@ body.vs-noteam #teamBox { display:none !important }
 @media (prefers-reduced-motion:reduce){ .vsWait i { animation:none } }
 .vsRow a.btn { display:flex; align-items:center; justify-content:center; text-decoration:none; color:inherit }
 .vsLink { text-decoration:none } .vsLink:hover { text-decoration:underline }
+#vsStat .sec { flex-basis:100%; font-size:12px; font-weight:700; padding:6px 10px; border-radius:8px; background:var(--board); color:var(--ink-3) }
+#vsStat .sec.ok { background:#e8f6ec; color:#1e6b3a } #vsStat .sec.bad { background:#fdeceb; color:var(--shut) } #vsStat .sec.empty { background:#fff6e0; color:#8a6400 }
