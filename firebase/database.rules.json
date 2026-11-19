@@ -11,6 +11,78 @@
         "at": { ".validate": true },
         "$other": { ".validate": false }
       }
+    },
+
+    "rooms": {
+      "$code": {
+        ".read": "auth != null && data.child('players').child(auth.uid).exists()",
+
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists() && $code.matches(/^[0-9]{4}$/) && newData.parent().child('seats').child('0').val() === auth.uid",
+          ".validate": "newData.hasChildren(['v','createdAt','first']) && newData.child('createdAt').val() === now"
+        },
+        "seats": {
+          ".read": "auth != null",
+          "$i": {
+            ".write": "auth != null && !data.exists() && newData.val() === auth.uid && $i.matches(/^[0-9]$/) && $code.matches(/^[0-9]{4}$/)"
+          }
+        },
+        "players": {
+          "$u": {
+            ".write": "auth != null && $u === auth.uid && !data.exists() && newData.isString() && newData.parent().parent().child('seats').child(newData.val()).val() === auth.uid"
+          }
+        },
+        "online": {
+          "$u": {
+            ".write": "auth != null && $u === auth.uid && root.child('rooms').child($code).child('players').child(auth.uid).exists()"
+          }
+        },
+        "downs": {
+          "$k": {
+            "h": {
+              ".write": "auth != null && !data.exists() && root.child('rooms').child($code).child('players').child(auth.uid).exists()",
+              ".validate": "newData.hasChildren(['startAt','off','def']) && newData.child('startAt').val() === now"
+            },
+            "shown": {
+              ".write": "auth != null && !data.exists() && data.parent().child('h/def').val() === auth.uid",
+              ".validate": "newData.isString() && newData.val().length < 20"
+            },
+            "play": {
+              ".write": "auth != null && !data.exists() && data.parent().child('h/off').val() === auth.uid && data.parent().child('shown').exists()",
+              ".validate": "newData.child('code').isString() && newData.child('code').val().length < 8000 && newData.child('goal').isNumber()"
+            },
+            "actual": {
+              ".write": "auth != null && !data.exists() && data.parent().child('h/def').val() === auth.uid && data.parent().child('play').exists()",
+              ".validate": "newData.isString() && newData.val().length < 20"
+            },
+            "res": {
+              ".write": "auth != null && !data.exists() && data.parent().child('h/off').val() === auth.uid && data.parent().child('actual').exists()",
+              ".validate": "newData.hasChildren(['o'])"
+            },
+            "conv": {
+              ".write": "auth != null && !data.exists() && data.parent().child('h/off').val() === auth.uid && data.parent().child('res').exists()",
+              ".validate": "newData.val() === 1 || newData.val() === 2"
+            },
+            "ready": {
+              "$u": {
+                ".write": "auth != null && $u === auth.uid && root.child('rooms').child($code).child('players').child(auth.uid).exists()"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "picks": {
+      "$code": {
+        "$k": {
+          "$u": {
+            ".read": "auth != null && $u === auth.uid",
+            ".write": "auth != null && $u === auth.uid"
+          }
+        }
+      }
     }
   }
 }
