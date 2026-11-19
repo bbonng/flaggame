@@ -83,7 +83,15 @@ li.bad .d{color:var(--shut)}
 /* ---------- 설정 ---------- */
 // 선생님 Firebase 웹 앱 설정값. 비어 있으면 화면에서 붙여 넣은 값(이 기기 저장)을 쓴다.
 // (웹 앱 설정값은 비밀번호가 아니다. 접근 제한은 보안 규칙이 맡는다.)
-const FIREBASE_CONFIG = null;
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyC7MV6nTT04FkVOPBxhtKQEfEMyUmPlWEU",
+  authDomain: "flaggame-30136.firebaseapp.com",
+  databaseURL: "https://flaggame-30136-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "flaggame-30136",
+  storageBucket: "flaggame-30136.firebasestorage.app",
+  messagingSenderId: "600667329975",
+  appId: "1:600667329975:web:1911ad6f0367e689440432"
+};
 const SDK_VER = '12.12.1';
 const SDK = n => `https://www.gstatic.com/firebasejs/${SDK_VER}/firebase-${n}.js`;
 const TIMEOUT = 12000;   // 단계마다 기다리는 최대 시간(ms)
