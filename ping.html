@@ -190,14 +190,19 @@ async function run(){
     set('conn','run'); t0=performance.now();
     const db=fb.db.getDatabase(app), {ref,onValue,set:dbSet,get,remove,serverTimestamp,onDisconnect,goOffline}=fb.db;
     cleanup.unshift(()=>goOffline(db));
-    try{ await withTimeout(new Promise(res=>{ const off=onValue(ref(db,'.info/connected'),s=>{ if(s.val()===true){ off(); res(); } }); }),TIMEOUT,
+    // onValue는 값이 이미 있으면 등록하는 그 순간 바로(동기) 부른다 → 구독 해제는 한 박자 뒤에
+    const firstVal=(path,ok)=>new Promise(res=>{ let off=null, done=false;
+      off=onValue(ref(db,path),s=>{ if(done||!ok(s)) return; done=true; res(s); setTimeout(()=>off&&off(),0); }); });
+    try{ await withTimeout(firstVal('.info/connected',s=>s.val()===true),TIMEOUT,
         '데이터베이스에 닿지 못했어요. databaseURL이 맞는지, 학교망이 *.firebasedatabase.app / *.firebaseio.com을 막는지 확인해 주세요'); }
     catch(e){ return fail('conn',explain(e)); }
     set('conn','ok',ms(t0), new URL(cfg.databaseURL).host);
 
     // 6. 서버 시각 차이 (작전 시계를 양쪽 기기에서 맞추는 데 씀)
     set('clock','run');
-    const offset=await new Promise(res=>{ const off=onValue(ref(db,'.info/serverTimeOffset'),s=>{ off(); res(+s.val()||0); }); });
+    let offset;
+    try{ offset=+(await withTimeout(firstVal('.info/serverTimeOffset',()=>true),TIMEOUT,'서버 시각을 받지 못했어요')).val()||0; }
+    catch(e){ return fail('clock',explain(e)); }
     const big=Math.abs(offset)>=2000;
     set('clock','ok',`${offset>=0?'+':''}${(offset/1000).toFixed(1)}초`, big?'이 기기 시계가 서버와 많이 달라요. 대전에서는 서버 시각으로 맞추니 괜찮아요':'');
 
